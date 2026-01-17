@@ -54,8 +54,8 @@ export async function POST(
       )
     }
 
-    const uploadedPhotos = []
-    const errors = []
+    const uploadedPhotos: { id: string; url: string; position: number }[] = []
+    const errors: { file: string; error: string | undefined }[] = []
 
     for (const file of files) {
       // Validate file
