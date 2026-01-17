@@ -182,6 +182,7 @@ model User {
   notificationSettings   NotificationSettings?
   interests              UserInterest[]
   pendingInterestMatches PendingInterestMatch[]
+  pushSubscriptions      PushSubscription[]
 
   @@index([status])
   @@index([lastActiveAt])
@@ -617,4 +618,21 @@ model PendingInterestMatch {
   @@index([userId, processed])
   @@index([createdAt])
   @@map("pending_interest_matches")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  endpoint  String   @unique
+  p256dh    String   // Public key
+  auth      String   // Auth secret
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }

@@ -1,5 +1,6 @@
 import { prisma } from './db'
 import { NotificationType, InterestDelivery, Prisma } from '@/generated/prisma'
+import { sendPushNotification } from './push'
 
 // Quiet hours configuration type
 interface QuietHours {
@@ -125,7 +126,7 @@ async function isNotificationEnabled(
 // Create a notification for a user
 export async function createNotification(
   options: CreateNotificationOptions
-): Promise<{ created: boolean; reason?: string }> {
+): Promise<{ created: boolean; reason?: string; notificationId?: string }> {
   const { userId, type, title, body, metadata, relatedOfferId, relatedListingId } = options
 
   // Check if notification type is enabled
@@ -147,7 +148,7 @@ export async function createNotification(
   const expiresAt = new Date()
   expiresAt.setDate(expiresAt.getDate() + 30)
 
-  await prisma.notification.create({
+  const notification = await prisma.notification.create({
     data: {
       userId,
       type,
@@ -161,7 +162,17 @@ export async function createNotification(
     },
   })
 
-  return { created: true }
+  // Send push notification if not within quiet hours
+  if (!deliverAt) {
+    // Fire and forget - don't block on push notification
+    sendPushNotification(userId, {
+      title,
+      body,
+      url: relatedOfferId ? `/inbox` : relatedListingId ? `/listings/${relatedListingId}` : '/',
+    }).catch((err) => console.error('[Push] Failed to send:', err))
+  }
+
+  return { created: true, notificationId: notification.id }
 }
 
 // Get paginated notifications for a user
