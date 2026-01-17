@@ -1,11 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/cron/daily-encouragement",
-      "schedule": "0 14 * * *"
-    },
-    {
-      "path": "/api/cron/interest-digest",
+      "path": "/api/cron/daily",
       "schedule": "0 14 * * *"
     },
     {
