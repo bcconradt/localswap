@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import { ToastProvider } from '@/components/ui/toast'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -13,10 +14,23 @@ export const metadata: Metadata = {
   description: 'A hyper-local bartering marketplace where people trade goods and services within nearby communities.',
   keywords: ['barter', 'trade', 'local', 'marketplace', 'swap', 'community'],
   authors: [{ name: 'LocalSwap' }],
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'LocalSwap',
+  },
+  formatDetection: {
+    telephone: false,
+  },
   openGraph: {
     title: 'LocalSwap - Trade with your neighbors',
     description: 'A hyper-local bartering marketplace where people trade goods and services within nearby communities.',
     type: 'website',
+  },
+  icons: {
+    icon: '/icons/icon.svg',
+    apple: '/icons/icon.svg',
   },
 }
 
@@ -36,7 +50,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} antialiased`}>
-        {children}
+        <ToastProvider>
+          {children}
+        </ToastProvider>
       </body>
     </html>
   )
