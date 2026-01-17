@@ -1,24 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { sendCodeSchema } from '@/lib/validations'
-
-// In production, integrate with Twilio or similar
-// For now, we'll use a mock verification code stored in the database
-const MOCK_CODE = '123456' // Remove in production
+import { generateVerificationCode, sendVerificationSMS, formatPhoneNumber } from '@/lib/sms'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { phone } = sendCodeSchema.parse(body)
 
+    // Format phone number
+    const formattedPhone = formatPhoneNumber(phone)
+
+    // Generate verification code
+    const code = generateVerificationCode()
+
     // Check if user exists or create placeholder
     let user = await prisma.user.findUnique({
-      where: { phone },
+      where: { phone: formattedPhone },
     })
 
     if (!user) {
       user = await prisma.user.create({
-        data: { phone },
+        data: { phone: formattedPhone },
       })
     }
 
@@ -31,14 +34,16 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    const verificationData = {
+      metadata: { code, sentAt: new Date().toISOString() },
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+    }
+
     if (existingVerification) {
       // Update existing verification
       await prisma.verification.update({
         where: { id: existingVerification.id },
-        data: {
-          metadata: { code: MOCK_CODE, sentAt: new Date().toISOString() },
-          expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
-        },
+        data: verificationData,
       })
     } else {
       // Create new verification
@@ -47,20 +52,26 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           type: 'phone',
           status: 'pending',
-          metadata: { code: MOCK_CODE, sentAt: new Date().toISOString() },
-          expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+          ...verificationData,
         },
       })
     }
 
-    // TODO: Send SMS via Twilio in production
-    // await twilio.messages.create({ to: phone, body: `Your LocalSwap code is: ${code}` })
+    // Send SMS
+    const smsResult = await sendVerificationSMS(formattedPhone, code)
+
+    if (!smsResult.success) {
+      return NextResponse.json(
+        { error: smsResult.error || 'Failed to send verification code' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Verification code sent',
-      // Remove in production - only for development testing
-      ...(process.env.NODE_ENV === 'development' && { devCode: MOCK_CODE })
+      // Only include code in development for testing
+      ...(process.env.NODE_ENV === 'development' && { devCode: code }),
     })
   } catch (error) {
     console.error('Send code error:', error)
