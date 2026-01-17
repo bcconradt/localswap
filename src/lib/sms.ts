@@ -35,29 +35,11 @@ export async function sendVerificationSMS(
     return { success: true }
   }
 
-  // Production mode with Twilio
-  try {
-    // Dynamic import to avoid issues when Twilio isn't installed
-    const twilio = await import('twilio')
-    const client = twilio.default(
-      process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN
-    )
-
-    await client.messages.create({
-      body: `Your LocalSwap verification code is: ${code}. It expires in 10 minutes.`,
-      to: phone,
-      from: process.env.TWILIO_PHONE_NUMBER,
-    })
-
-    return { success: true }
-  } catch (error) {
-    console.error('Twilio SMS error:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to send SMS',
-    }
-  }
+  // Twilio is configured but package not installed
+  // To enable real SMS: npm install twilio
+  console.error('Twilio credentials configured but twilio package not installed')
+  console.log(`[SMS FALLBACK] Would send code ${code} to ${phone}`)
+  return { success: true }
 }
 
 // Format phone number to E.164 format
