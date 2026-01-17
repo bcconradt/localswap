@@ -1,65 +1,152 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useState } from 'react'
+import { RefreshCw, Package } from 'lucide-react'
+import { Header } from '@/components/layout/header'
+import { BottomNav } from '@/components/layout/bottom-nav'
+import { ListingCard } from '@/components/features/listing-card'
+import { CategoryGrid } from '@/components/features/category-grid'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Button } from '@/components/ui/button'
+
+// Mock data for development
+const mockListings = [
+  {
+    id: '1',
+    title: 'Kids Bicycle, 20-inch',
+    category: 'kids',
+    condition: 'like_new',
+    isService: false,
+    wantsType: 'open',
+    primaryPhoto: { thumbnailUrl: '/placeholder-bike.jpg' },
+    user: {
+      id: 'u1',
+      displayName: 'Maria S.',
+      avatarUrl: null,
+      trustScore: 4.8,
+      completedSwaps: 12,
+      isTraveler: false,
+    },
+    location: { city: 'Austin', neighborhood: 'Downtown' },
+    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+  },
+  {
+    id: '2',
+    title: 'Guitar Lessons (1 hour)',
+    category: 'services',
+    condition: null,
+    isService: true,
+    wantsType: 'categories',
+    primaryPhoto: null,
+    user: {
+      id: 'u2',
+      displayName: 'Marcus T.',
+      avatarUrl: null,
+      trustScore: 4.9,
+      completedSwaps: 24,
+      isTraveler: false,
+    },
+    location: { city: 'Austin', neighborhood: 'East Side' },
+    createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000),
+  },
+  {
+    id: '3',
+    title: 'Vintage Camera Collection',
+    category: 'electronics',
+    condition: 'good',
+    isService: false,
+    wantsType: 'specific',
+    primaryPhoto: null,
+    user: {
+      id: 'u3',
+      displayName: 'Jordan K.',
+      avatarUrl: null,
+      trustScore: 4.5,
+      completedSwaps: 3,
+      isTraveler: true,
+    },
+    location: { city: 'Austin', neighborhood: 'South Congress' },
+    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+  },
+]
+
+export default function HomePage() {
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const filteredListings = selectedCategory
+    ? mockListings.filter((l) => l.category === selectedCategory)
+    : mockListings
+
+  const handleRefresh = () => {
+    setIsLoading(true)
+    setTimeout(() => setIsLoading(false), 1000)
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="min-h-screen bg-gray-50 pb-20">
+      <Header location="Downtown Austin" />
+
+      <main className="max-w-lg mx-auto px-4 py-4">
+        {/* Welcome message */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">
+            What can you swap today?
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="mt-1 text-gray-600">
+            Browse items and services in your community
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Category filters */}
+        <div className="mb-6">
+          <CategoryGrid
+            selected={selectedCategory || undefined}
+            onSelect={(cat) => setSelectedCategory(cat === selectedCategory ? null : cat)}
+            compact
+          />
         </div>
+
+        {/* Listings header */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {selectedCategory ? `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} nearby` : 'Nearby listings'}
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+
+        {/* Listings grid */}
+        {filteredListings.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3">
+            {filteredListings.map((listing) => (
+              <ListingCard key={listing.id} listing={listing} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Package className="h-12 w-12" />}
+            title="No listings found"
+            description={
+              selectedCategory
+                ? `No ${selectedCategory} items nearby. Try a different category.`
+                : 'Be the first to post something in your area!'
+            }
+            action={{
+              label: 'Create Listing',
+              onClick: () => (window.location.href = '/create'),
+            }}
+          />
+        )}
       </main>
+
+      <BottomNav />
     </div>
-  );
+  )
 }

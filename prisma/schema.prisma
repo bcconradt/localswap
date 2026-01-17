@@ -1,0 +1,476 @@
+// LocalSwap Database Schema
+// Hyper-local bartering marketplace
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis]
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserStatus {
+  active
+  suspended
+  banned
+  deleted
+}
+
+enum UserRole {
+  user
+  moderator
+  admin
+}
+
+enum VerificationType {
+  phone
+  email
+  id_document
+  social_facebook
+  social_google
+}
+
+enum VerificationStatus {
+  pending
+  verified
+  failed
+  expired
+}
+
+enum LocationType {
+  home
+  traveler
+}
+
+enum ListingCategory {
+  household
+  kids
+  electronics
+  clothing
+  books
+  sports
+  tools
+  garden
+  services
+  other
+}
+
+enum ListingCondition {
+  new
+  like_new
+  good
+  fair
+  for_parts
+}
+
+enum ListingStatus {
+  draft
+  active
+  paused
+  traded
+  deleted
+}
+
+enum WantsType {
+  open
+  categories
+  specific
+}
+
+enum OfferStatus {
+  pending
+  countered
+  accepted
+  declined
+  expired
+  completed
+  disputed
+  cancelled
+}
+
+enum MessageType {
+  text
+  offer_card
+  image
+  system
+}
+
+enum ReportReason {
+  no_show
+  not_as_described
+  scam
+  harassment
+  inappropriate_content
+  other
+}
+
+enum ReportStatus {
+  pending
+  reviewing
+  resolved_warning
+  resolved_suspension
+  resolved_ban
+  resolved_dismissed
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
+model User {
+  id            String     @id @default(cuid())
+  phone         String?    @unique
+  email         String?    @unique
+  passwordHash  String?    @map("password_hash")
+  status        UserStatus @default(active)
+  role          UserRole   @default(user)
+  lastActiveAt  DateTime?  @map("last_active_at")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  profile          Profile?
+  verifications    Verification[]
+  locations        Location[]
+  travelerProfile  TravelerProfile?
+  listings         Listing[]
+  sentOffers       Offer[]          @relation("OfferSender")
+  receivedOffers   Offer[]          @relation("OfferReceiver")
+  sentMessages     Message[]
+  givenReviews     Review[]         @relation("ReviewGiver")
+  receivedReviews  Review[]         @relation("ReviewReceiver")
+  reportsFiled     Report[]         @relation("ReportFiler")
+  reportsReceived  Report[]         @relation("ReportTarget")
+  moderatedReports Report[]         @relation("ReportModerator")
+  blockedUsers     Block[]          @relation("Blocker")
+  blockedBy        Block[]          @relation("Blocked")
+  chatThreads      ChatThread[]     @relation("ChatParticipant")
+
+  @@index([status])
+  @@index([lastActiveAt])
+  @@map("users")
+}
+
+model Profile {
+  id                    String   @id @default(cuid())
+  userId                String   @unique @map("user_id")
+  displayName           String   @map("display_name") @db.VarChar(50)
+  avatarUrl             String?  @map("avatar_url")
+  bio                   String?  @db.VarChar(500)
+  neighborhood          String?
+
+  // Cached trust metrics (recalculated on events)
+  trustScore            Decimal  @default(0) @map("trust_score") @db.Decimal(3, 2)
+  completedSwaps        Int      @default(0) @map("completed_swaps")
+  responseRate          Decimal  @default(0) @map("response_rate") @db.Decimal(3, 2)
+  responseTimeAvgHours  Decimal? @map("response_time_avg_hours") @db.Decimal(5, 2)
+
+  // Settings
+  notificationsEnabled    Boolean @default(true) @map("notifications_enabled")
+  locationSharingEnabled  Boolean @default(false) @map("location_sharing_enabled")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([neighborhood])
+  @@index([trustScore])
+  @@map("profiles")
+}
+
+model Verification {
+  id         String             @id @default(cuid())
+  userId     String             @map("user_id")
+  type       VerificationType
+  status     VerificationStatus @default(pending)
+  verifiedAt DateTime?          @map("verified_at")
+  expiresAt  DateTime?          @map("expires_at")
+  metadata   Json?              // Encrypted verification-specific data
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([status])
+  @@map("verifications")
+}
+
+model Location {
+  id           String       @id @default(cuid())
+  userId       String       @map("user_id")
+  type         LocationType @default(home)
+  latitude     Decimal      @db.Decimal(10, 8)
+  longitude    Decimal      @db.Decimal(11, 8)
+  geohash      String       @db.VarChar(12) // For efficient geo queries
+  city         String
+  neighborhood String?
+  radiusMiles  Decimal      @default(10) @map("radius_miles") @db.Decimal(4, 1)
+  isActive     Boolean      @default(true) @map("is_active")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listings        Listing[]
+  travelerProfile TravelerProfile?
+
+  @@index([geohash])
+  @@index([isActive])
+  @@index([type])
+  @@map("locations")
+}
+
+model TravelerProfile {
+  id                  String   @id @default(cuid())
+  userId              String   @unique @map("user_id")
+  locationId          String   @unique @map("location_id")
+  startDate           DateTime @map("start_date") @db.Date
+  endDate             DateTime @map("end_date") @db.Date
+  availabilityWindows Json?    @map("availability_windows") // [{day, start, end}]
+  isActive            Boolean  @default(true) @map("is_active")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([isActive])
+  @@index([startDate, endDate])
+  @@map("traveler_profiles")
+}
+
+model Listing {
+  id          String            @id @default(cuid())
+  userId      String            @map("user_id")
+  locationId  String            @map("location_id")
+
+  title       String            @db.VarChar(100)
+  description String?           @db.VarChar(2000)
+  category    ListingCategory
+  subcategory String?
+  condition   ListingCondition?
+  isService   Boolean           @default(false) @map("is_service")
+
+  // What they want in return
+  wantsType        WantsType @default(open) @map("wants_type")
+  wantsCategories  String[]  @map("wants_categories")
+  wantsDescription String?   @map("wants_description") @db.VarChar(500)
+
+  // Availability
+  availability       Json?  // [{day, time_of_day}]
+  preferredMeetupArea String? @map("preferred_meetup_area")
+
+  // Status
+  status ListingStatus @default(draft)
+
+  // Denormalized for search
+  photoCount      Int     @default(0) @map("photo_count")
+  primaryPhotoUrl String? @map("primary_photo_url")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  expiresAt DateTime? @map("expires_at") // For traveler listings
+
+  // Relations
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location   Location       @relation(fields: [locationId], references: [id])
+  photos     ListingPhoto[]
+  offers     Offer[]
+  offerItems OfferItem[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([category])
+  @@index([createdAt])
+  @@map("listings")
+}
+
+model ListingPhoto {
+  id           String   @id @default(cuid())
+  listingId    String   @map("listing_id")
+  url          String
+  thumbnailUrl String   @map("thumbnail_url")
+  position     Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, position])
+  @@map("listing_photos")
+}
+
+model Offer {
+  id        String      @id @default(cuid())
+  listingId String      @map("listing_id")
+  offererId String      @map("offerer_id")
+  ownerId   String      @map("owner_id")
+  status    OfferStatus @default(pending)
+  message   String?     @db.VarChar(500)
+
+  // Scheduling (after acceptance)
+  meetupLocation  String?   @map("meetup_location")
+  meetupLatitude  Decimal?  @map("meetup_latitude") @db.Decimal(10, 8)
+  meetupLongitude Decimal?  @map("meetup_longitude") @db.Decimal(11, 8)
+  meetupTime      DateTime? @map("meetup_time")
+
+  // Completion tracking
+  offererCompleted Boolean   @default(false) @map("offerer_completed")
+  ownerCompleted   Boolean   @default(false) @map("owner_completed")
+  completedAt      DateTime? @map("completed_at")
+
+  // For counter-offers
+  parentOfferId String? @map("parent_offer_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  expiresAt DateTime @map("expires_at")
+
+  // Relations
+  listing     Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  offerer     User        @relation("OfferSender", fields: [offererId], references: [id])
+  owner       User        @relation("OfferReceiver", fields: [ownerId], references: [id])
+  parentOffer Offer?      @relation("CounterOffers", fields: [parentOfferId], references: [id])
+  counterOffers Offer[]   @relation("CounterOffers")
+  items       OfferItem[]
+  chatThread  ChatThread?
+  reviews     Review[]
+
+  @@index([listingId])
+  @@index([offererId])
+  @@index([ownerId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("offers")
+}
+
+model OfferItem {
+  id          String  @id @default(cuid())
+  offerId     String  @map("offer_id")
+  listingId   String? @map("listing_id") // If offering existing listing
+  description String? @db.VarChar(500)   // If describing offer
+  photoUrl    String? @map("photo_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  offer   Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  listing Listing? @relation(fields: [listingId], references: [id])
+
+  @@index([offerId])
+  @@map("offer_items")
+}
+
+model ChatThread {
+  id                 String   @id @default(cuid())
+  offerId            String   @unique @map("offer_id")
+  lastMessageAt      DateTime @default(now()) @map("last_message_at")
+  lastMessagePreview String?  @map("last_message_preview") @db.VarChar(100)
+  unreadCounts       Json?    @map("unread_counts") // {userId: count}
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  offer        Offer     @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  messages     Message[]
+  participants User[]    @relation("ChatParticipant")
+
+  @@index([lastMessageAt])
+  @@map("chat_threads")
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  threadId  String      @map("thread_id")
+  senderId  String      @map("sender_id")
+  type      MessageType @default(text)
+  content   String      @db.VarChar(2000)
+  metadata  Json?       // For offer cards, images, etc.
+  readAt    DateTime?   @map("read_at")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  // Relations
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User       @relation(fields: [senderId], references: [id])
+
+  @@index([threadId, createdAt])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  offerId    String   @map("offer_id")
+  reviewerId String   @map("reviewer_id")
+  revieweeId String   @map("reviewee_id")
+  rating     Int      @db.SmallInt // 1-5
+  tags       String[] // ["on_time", "friendly", "as_described"]
+  comment    String?  @db.VarChar(1000)
+  isVisible  Boolean  @default(false) @map("is_visible") // True when both reviews submitted
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  offer    Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  reviewer User  @relation("ReviewGiver", fields: [reviewerId], references: [id])
+  reviewee User  @relation("ReviewReceiver", fields: [revieweeId], references: [id])
+
+  @@unique([offerId, reviewerId])
+  @@index([revieweeId])
+  @@index([rating])
+  @@index([createdAt])
+  @@map("reviews")
+}
+
+model Report {
+  id                String       @id @default(cuid())
+  reporterId        String       @map("reporter_id")
+  reportedUserId    String       @map("reported_user_id")
+  reportedListingId String?      @map("reported_listing_id")
+  offerId           String?      @map("offer_id")
+  reason            ReportReason
+  description       String       @db.VarChar(2000)
+  evidenceUrls      String[]     @map("evidence_urls")
+  status            ReportStatus @default(pending)
+  moderatorId       String?      @map("moderator_id")
+  resolutionNotes   String?      @map("resolution_notes")
+  resolvedAt        DateTime?    @map("resolved_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  reporter       User @relation("ReportFiler", fields: [reporterId], references: [id])
+  reportedUser   User @relation("ReportTarget", fields: [reportedUserId], references: [id])
+  moderator      User? @relation("ReportModerator", fields: [moderatorId], references: [id])
+
+  @@index([reporterId])
+  @@index([reportedUserId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("reports")
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+  @@map("blocks")
+}
