@@ -141,3 +141,61 @@ export const createReportSchema = z.object({
 export const blockUserSchema = z.object({
   blockedId: z.string().cuid(),
 })
+
+// Notification validations
+export const notificationListSchema = z.object({
+  limit: z.coerce.number().min(1).max(100).default(20),
+  cursor: z.string().optional(),
+  unreadOnly: z.coerce.boolean().default(false),
+})
+
+export const markReadSchema = z.object({
+  notificationIds: z.array(z.string().cuid()),
+})
+
+export const deleteNotificationsSchema = z.object({
+  notificationIds: z.array(z.string().cuid()),
+})
+
+// Notification settings validations
+export const updateNotificationSettingsSchema = z.object({
+  globalEnabled: z.boolean().optional(),
+  offerReceived: z.boolean().optional(),
+  offerAccepted: z.boolean().optional(),
+  offerDeclined: z.boolean().optional(),
+  offerCountered: z.boolean().optional(),
+  offerExpired: z.boolean().optional(),
+  messageReceived: z.boolean().optional(),
+  reviewReceived: z.boolean().optional(),
+  tradeCompleted: z.boolean().optional(),
+  newListingMatch: z.boolean().optional(),
+  interestDelivery: z.enum(['immediate', 'daily_digest']).optional(),
+  dailyEncouragement: z.boolean().optional(),
+  quietHours: z.object({
+    enabled: z.boolean(),
+    start: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:MM)'),
+    end: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:MM)'),
+    timezone: z.string(),
+  }).optional(),
+})
+
+// Interest validations
+export const addInterestSchema = z.object({
+  category: z.enum([
+    'household', 'kids', 'electronics', 'clothing', 'books',
+    'sports', 'tools', 'garden', 'services', 'other'
+  ]),
+  keywords: z.array(z.string().max(50)).max(10).optional(),
+  radiusMiles: z.number().min(1).max(100).optional(),
+})
+
+export const replaceInterestsSchema = z.object({
+  interests: z.array(z.object({
+    category: z.enum([
+      'household', 'kids', 'electronics', 'clothing', 'books',
+      'sports', 'tools', 'garden', 'services', 'other'
+    ]),
+    keywords: z.array(z.string().max(50)).max(10).optional(),
+    radiusMiles: z.number().min(1).max(100).optional(),
+  })),
+})

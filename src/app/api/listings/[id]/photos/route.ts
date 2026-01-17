@@ -7,6 +7,7 @@ import {
   deleteFile,
   validateImageFile,
 } from '@/lib/storage'
+import { notifyInterestedUsers } from '@/lib/interest-matching'
 
 // POST /api/listings/[id]/photos - Upload photos to a listing
 export async function POST(
@@ -98,15 +99,24 @@ export async function POST(
         orderBy: { position: 'asc' },
       })
 
+      const wasActivated = listing.status === 'draft' && allPhotos.length > 0
+
       await prisma.listing.update({
         where: { id },
         data: {
           photoCount: allPhotos.length,
           primaryPhotoUrl: allPhotos[0]?.url || null,
           // Auto-activate listing if it has at least one photo and was draft
-          status: listing.status === 'draft' && allPhotos.length > 0 ? 'active' : undefined,
+          status: wasActivated ? 'active' : undefined,
         },
       })
+
+      // Notify interested users when listing becomes active
+      if (wasActivated) {
+        notifyInterestedUsers(id).catch((err) =>
+          console.error('Failed to notify interested users:', err)
+        )
+      }
     }
 
     return NextResponse.json({

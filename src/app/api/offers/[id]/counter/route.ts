@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { counterOfferSchema } from '@/lib/validations'
 import { getOfferExpiry } from '@/lib/utils'
+import { notifyOfferCountered } from '@/lib/notifications'
 
 export async function POST(
   request: NextRequest,
@@ -80,7 +81,24 @@ export async function POST(
       })
     }
 
-    // TODO: Send push notification
+    // Send notification to original offerer
+    const [ownerProfile, listing] = await Promise.all([
+      prisma.profile.findUnique({
+        where: { userId: user.id },
+        select: { displayName: true },
+      }),
+      prisma.listing.findUnique({
+        where: { id: offer.listingId },
+        select: { id: true, title: true },
+      }),
+    ])
+    await notifyOfferCountered(
+      offer.offererId,
+      ownerProfile?.displayName || 'Someone',
+      listing?.title || 'a listing',
+      counterOffer.id,
+      offer.listingId
+    )
 
     return NextResponse.json(counterOffer, { status: 201 })
   } catch (error) {

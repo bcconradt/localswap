@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { sendMessageSchema } from '@/lib/validations'
+import { notifyMessageReceived } from '@/lib/notifications'
 
 export async function POST(
   request: NextRequest,
@@ -85,7 +86,19 @@ export async function POST(
       },
     })
 
-    // TODO: Send push notification to other participant
+    // Send notification to other participant
+    if (otherParticipant && data.type === 'text') {
+      const senderProfile = await prisma.profile.findUnique({
+        where: { userId: user.id },
+        select: { displayName: true },
+      })
+      await notifyMessageReceived(
+        otherParticipant.id,
+        senderProfile?.displayName || 'Someone',
+        data.content,
+        thread.offerId
+      )
+    }
 
     return NextResponse.json({
       id: message.id,

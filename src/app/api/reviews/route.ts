@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { createReviewSchema } from '@/lib/validations'
+import { notifyReviewReceived } from '@/lib/notifications'
 
 // GET /api/reviews - Get user's reviews
 export async function GET(request: NextRequest) {
@@ -123,6 +124,18 @@ export async function POST(request: NextRequest) {
         isVisible: false, // Will be made visible when both submit
       },
     })
+
+    // Send notification to reviewee
+    const reviewerProfile = await prisma.profile.findUnique({
+      where: { userId: user.id },
+      select: { displayName: true },
+    })
+    await notifyReviewReceived(
+      revieweeId,
+      reviewerProfile?.displayName || 'Someone',
+      data.rating,
+      data.offerId
+    )
 
     // Check if both parties have now reviewed
     const otherReview = await prisma.review.findUnique({

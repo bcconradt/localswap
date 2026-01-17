@@ -120,6 +120,30 @@ enum ReportStatus {
   resolved_dismissed
 }
 
+enum NotificationType {
+  offer_received
+  offer_accepted
+  offer_declined
+  offer_countered
+  offer_expired
+  message_received
+  review_received
+  trade_completed
+  new_listing_match
+  daily_encouragement
+}
+
+enum InterestDelivery {
+  immediate
+  daily_digest
+}
+
+enum QuoteCategory {
+  motivation
+  swap_tip
+  community
+}
+
 // ============================================================================
 // MODELS
 // ============================================================================
@@ -152,6 +176,12 @@ model User {
   blockedUsers     Block[]          @relation("Blocker")
   blockedBy        Block[]          @relation("Blocked")
   chatThreads      ChatThread[]     @relation("ChatParticipant")
+
+  // Notification relations
+  notifications          Notification[]
+  notificationSettings   NotificationSettings?
+  interests              UserInterest[]
+  pendingInterestMatches PendingInterestMatch[]
 
   @@index([status])
   @@index([lastActiveAt])
@@ -283,11 +313,12 @@ model Listing {
   expiresAt DateTime? @map("expires_at") // For traveler listings
 
   // Relations
-  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  location   Location       @relation(fields: [locationId], references: [id])
-  photos     ListingPhoto[]
-  offers     Offer[]
-  offerItems OfferItem[]
+  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location               Location               @relation(fields: [locationId], references: [id])
+  photos                 ListingPhoto[]
+  offers                 Offer[]
+  offerItems             OfferItem[]
+  pendingInterestMatches PendingInterestMatch[]
 
   @@index([userId])
   @@index([status])
@@ -473,4 +504,117 @@ model Block {
   @@index([blockerId])
   @@index([blockedId])
   @@map("blocks")
+}
+
+// ============================================================================
+// NOTIFICATION MODELS
+// ============================================================================
+
+model Notification {
+  id               String           @id @default(cuid())
+  userId           String           @map("user_id")
+  type             NotificationType
+  title            String           @db.VarChar(200)
+  body             String           @db.VarChar(1000)
+  metadata         Json?            // Additional data for deep linking, etc.
+  isRead           Boolean          @default(false) @map("is_read")
+  readAt           DateTime?        @map("read_at")
+  expiresAt        DateTime?        @map("expires_at") // 30-day auto-cleanup
+  deliverAt        DateTime?        @map("deliver_at") // For quiet hours support
+  relatedOfferId   String?          @map("related_offer_id")
+  relatedListingId String?          @map("related_listing_id")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@index([deliverAt])
+  @@map("notifications")
+}
+
+model NotificationSettings {
+  id                  String           @id @default(cuid())
+  userId              String           @unique @map("user_id")
+
+  // Master toggle
+  globalEnabled       Boolean          @default(true) @map("global_enabled")
+
+  // Individual toggles for transactional notifications
+  offerReceived       Boolean          @default(true) @map("offer_received")
+  offerAccepted       Boolean          @default(true) @map("offer_accepted")
+  offerDeclined       Boolean          @default(true) @map("offer_declined")
+  offerCountered      Boolean          @default(true) @map("offer_countered")
+  offerExpired        Boolean          @default(true) @map("offer_expired")
+  messageReceived     Boolean          @default(true) @map("message_received")
+  reviewReceived      Boolean          @default(true) @map("review_received")
+  tradeCompleted      Boolean          @default(true) @map("trade_completed")
+
+  // Interest-based notifications
+  newListingMatch     Boolean          @default(true) @map("new_listing_match")
+  interestDelivery    InterestDelivery @default(immediate) @map("interest_delivery")
+
+  // Daily encouragement
+  dailyEncouragement  Boolean          @default(true) @map("daily_encouragement")
+
+  // Quiet hours (JSON: {enabled, start, end, timezone})
+  quietHours          Json?            @map("quiet_hours")
+
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_settings")
+}
+
+model UserInterest {
+  id          String          @id @default(cuid())
+  userId      String          @map("user_id")
+  category    ListingCategory
+  keywords    String[]        // Optional enhanced matching
+  radiusMiles Decimal?        @map("radius_miles") @db.Decimal(4, 1) // Defaults to user's location radius
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@index([category])
+  @@map("user_interests")
+}
+
+model DailyQuote {
+  id        String        @id @default(cuid())
+  content   String        @db.VarChar(500)
+  author    String?       @db.VarChar(100)
+  category  QuoteCategory
+  isActive  Boolean       @default(true) @map("is_active")
+  usedAt    DateTime?     @map("used_at") // Rotation tracking
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  @@index([isActive, usedAt])
+  @@index([category])
+  @@map("daily_quotes")
+}
+
+model PendingInterestMatch {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  listingId String   @map("listing_id")
+  category  ListingCategory
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([userId, processed])
+  @@index([createdAt])
+  @@map("pending_interest_matches")
 }

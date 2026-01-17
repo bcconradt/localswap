@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { createOfferSchema } from '@/lib/validations'
 import { getOfferExpiry } from '@/lib/utils'
+import { notifyOfferReceived } from '@/lib/notifications'
 
 // GET /api/offers - Get user's offers
 export async function GET(request: NextRequest) {
@@ -241,7 +242,18 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // TODO: Send push notification to listing owner
+    // Send notification to listing owner
+    const offererProfile = await prisma.profile.findUnique({
+      where: { userId: user.id },
+      select: { displayName: true },
+    })
+    await notifyOfferReceived(
+      listing.userId,
+      offererProfile?.displayName || 'Someone',
+      listing.title,
+      offer.id,
+      listing.id
+    )
 
     return NextResponse.json(offer, { status: 201 })
   } catch (error) {

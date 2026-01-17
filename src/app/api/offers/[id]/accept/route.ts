@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { notifyOfferAccepted } from '@/lib/notifications'
 
 export async function POST(
   request: NextRequest,
@@ -55,7 +56,24 @@ export async function POST(
       })
     }
 
-    // TODO: Send push notification to offerer
+    // Send notification to offerer
+    const [ownerProfile, listing] = await Promise.all([
+      prisma.profile.findUnique({
+        where: { userId: user.id },
+        select: { displayName: true },
+      }),
+      prisma.listing.findUnique({
+        where: { id: offer.listingId },
+        select: { id: true, title: true },
+      }),
+    ])
+    await notifyOfferAccepted(
+      offer.offererId,
+      ownerProfile?.displayName || 'Someone',
+      listing?.title || 'a listing',
+      offer.id,
+      offer.listingId
+    )
 
     return NextResponse.json(updated)
   } catch (error) {
